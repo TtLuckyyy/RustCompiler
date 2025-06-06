@@ -1,6 +1,6 @@
 """语义检查器"""
-from typing import Optional, Dict, List, Union, Tuple
-from compiler_parser_node import ParseNode, ExprResult, SynthesizedAttributes
+from typing import Dict, List
+from compiler_parser_node import ParseNode, ExprResult
 from compiler_logger import logger
 from compiler_semantic_symbol import VariableSymbol, ParameterSymbol, FunctionSymbol, SymbolTable, Scope
 from compiler_semantic_symbol import Type, BaseType, ArrayType, TupleType, ReferenceType, OperatorType, UnitType, UninitializedType, RangeType
@@ -25,22 +25,21 @@ class SemanticError:
 class SemanticChecker:
     """语义检查器"""
     def __init__(self):
-        self.symbolTable = SymbolTable()                        # 符号表
-        self.pending_type_inference: Dict[str, ParseNode] = {}  # 待类型推断变量符号
-        self.errors = []                                        # 语义错误
-        self.current_function = None                            # 当前处理的函数
-        self.loop_stack = []                                    # 循环栈
-        self.code_generator = IntermediateCodeGenerator()       # 中间代码生成器
-        self.reference_tracker = {}                             # 引用状态追踪器
-        # 格式: {var_name: {'is_mutable': bool, 'immutable_refs': int, 'mutable_ref': bool}}
+        self.symbolTable = SymbolTable()                        
+        self.pending_type_inference: Dict[str, ParseNode] = {} 
+        self.errors = []                                    
+        self.current_function = None                       
+        self.loop_stack = []                             
+        self.code_generator = IntermediateCodeGenerator()     
+        self.reference_tracker = {}                           
         
     def reset(self):
         """重置"""
-        self.symbolTable = SymbolTable()                        # 符号表
-        self.pending_type_inference: Dict[str, ParseNode] = {}  # 待类型推断变量符号
-        self.errors = []                                        # 语义错误
-        self.current_function = None                            # 当前处理的函数
-        self.reference_tracker = {}                             # 引用状态追踪器
+        self.symbolTable = SymbolTable()                      
+        self.pending_type_inference: Dict[str, ParseNode] = {}  
+        self.errors = []                                      
+        self.current_function = None                         
+        self.reference_tracker = {}                          
         self.code_generator.reset()
 
     def check(self, node: ParseNode):
@@ -56,12 +55,12 @@ class SemanticChecker:
         method_name = f"_handle_{node.symbol}"
         action = getattr(self, method_name, self.no_action)
         self._update_position(node=node)
-        logger.info(f"处理: {method_name}")
+        logger.info(f"✏️  当前处理: {method_name}")
         action(node)
             
     def no_action(self, node: ParseNode):
         """默认处理规则"""
-        logger.info(f"未定义处理规则: {node.symbol}")
+        logger.info(f"❌  此处未定义处理规则: {node.symbol}")
         pass
 
     # ---------- 具体节点检查方法 ----------
@@ -72,11 +71,7 @@ class SemanticChecker:
         self.code_generator.emit('j', None, None, None)
         
     def _handle_Program(self, node: ParseNode):
-        """
-        处理规约成功部分
 
-        {'prod_lhs': 'Program', 'prod_rhs': ['JFuncStart', 'DeclarationString']},
-        """
         # 检查是否有待类型推断的符号
         if self.pending_type_inference:
             for var_name, var_node in self.pending_type_inference.items():
@@ -90,30 +85,12 @@ class SemanticChecker:
         self.code_generator.backpatch(node.children[0].attributes.next_list, funcStartSymbol.quad_index)
             
     def _handle_Declaration(self, node: ParseNode):
-        """
-        {'prod_lhs': 'Declaration', 'prod_rhs': ['FunctionDeclaration']},
-        """
         pass
 
     def _handle_DeclarationString(self, node: ParseNode):
-        """
-        {'prod_lhs': 'DeclarationString', 'prod_rhs': ['Declaration', 'DeclarationString']},
-        {'prod_lhs': 'DeclarationString', 'prod_rhs': ['Declaration']},
-        """
         pass
 
     def _handle_Type(self, node: ParseNode):
-        """
-        处理类型节点并构造类型对象
-        设置节点属性: 1.类型对象
-
-        {'prod_lhs': 'Type', 'prod_rhs': ['i32']},
-        {'prod_lhs': 'Type', 'prod_rhs': ['[', 'Type', ';', 'NUM', ']']},
-        {'prod_lhs': 'Type', 'prod_rhs': ['(', 'TupleTypeInner', ')']},
-        {'prod_lhs': 'Type', 'prod_rhs': ['(', ')']},
-        {'prod_lhs': 'Type', 'prod_rhs': ['&', 'mut', 'Type']},
-        {'prod_lhs': 'Type', 'prod_rhs': ['&', 'Type']},
-        """
         first_child = node.children[0]
 
         
@@ -155,13 +132,6 @@ class SemanticChecker:
             )
 
     def _handle_TupleTypeInner(self, node: ParseNode):
-        """
-        处理元组内部结构
-        设置节点属性: 1.成员类型列表member_types(类型对象列表)
-
-        {'prod_lhs': 'TupleTypeInner', 'prod_rhs': ['Type', ',', 'TypeList']},
-        {'prod_lhs': 'TupleTypeInner', 'prod_rhs': ['Type', ',']},
-        """
         member_types = []
         for child in node.children:
             if child.symbol == "Type":
@@ -172,13 +142,6 @@ class SemanticChecker:
         node.member_types = member_types
 
     def _handle_TypeList(self, node: ParseNode):
-        """
-        处理类型列表 (用于元组的后续元素)
-
-        {'prod_lhs': 'TypeList', 'prod_rhs': ['Type']},
-        {'prod_lhs': 'TypeList', 'prod_rhs': ['Type', ',']},
-        {'prod_lhs': 'TypeList', 'prod_rhs': ['Type', ',', 'TypeList']},
-        """
         member_types = []
         for child in node.children:
             if child.symbol == "Type":
@@ -189,14 +152,7 @@ class SemanticChecker:
         node.member_types = member_types
 
     def _handle_VarDeclaration(self, node: ParseNode):
-        """
-        处理变量声明节点
-        设置节点属性: 1.是否可变 2.变量名称
-        注: 此方法只解析节点并设置属性,不会添加到符号表中
 
-        {'prod_lhs': 'VarDeclaration', 'prod_rhs': ['mut', 'ID']},
-        {'prod_lhs': 'VarDeclaration', 'prod_rhs': ['ID']},
-        """
         if node.children[0].value == 'mut':
             node.var_name = node.children[1].value
             node.is_mutable = True
@@ -205,15 +161,7 @@ class SemanticChecker:
             node.is_mutable = False  
             
     def _handle_VarDeclarationStatement(self, node: ParseNode):
-        """
-        处理变量声明语句
-        变量声明但是没有初始化 统一使用UninitializedType类型
-        创建变量符号: 1.是否可变 2.变量名称 3.类型对象 4.初始值
-        生成代码: 仅声明变量 不产生实际指令
 
-        {'prod_lhs': 'VarDeclarationStatement', 'prod_rhs': ['let', 'VarDeclaration', ':', 'Type', ';']},
-        {'prod_lhs': 'VarDeclarationStatement', 'prod_rhs': ['let', 'VarDeclaration', ';']},
-        """
         # 从VarDeclaration获取变量名和是否可变
         var_decl_node = node.children[1]
 
@@ -242,15 +190,6 @@ class SemanticChecker:
         self.symbolTable.insert(var_symbol)
         
     def _handle_VarDeclarationAssignStatement(self, node: ParseNode):
-        """
-        处理变量声明赋值语句
-        变量声明同时初始化
-        创建变量符号: 1.是否可变 2.变量名称 3.类型对象 4.初始值
-        生成代码: 计算表达式 + 存储到变量
-
-        {'prod_lhs': 'VarDeclarationAssignStatement', 'prod_rhs': ['let', 'VarDeclaration', ':', 'Type', '=', 'Expression', ';']},
-        {'prod_lhs': 'VarDeclarationAssignStatement', 'prod_rhs': ['let', 'VarDeclaration', '=', 'Expression', ';']},
-        """
 
         # 获取变量名和类型
         var_decl_node = node.children[1]    # VarDeclaration 节点
@@ -290,12 +229,7 @@ class SemanticChecker:
 # ------------------ 函数定义 -----------------------
 
     def _handle_ParamVar(self, node: ParseNode):
-        """
-        处理单个函数参数节点
-        设置节点属性: 1.参数列表
 
-        {'prod_lhs': 'ParamVar', 'prod_rhs': ['VarDeclaration', ':', 'Type']},
-        """
         # 提取变量声明和类型节点
         var_decl_node = node.children[0]  # VarDeclaration
         type_node = node.children[2]      # Type
@@ -309,15 +243,7 @@ class SemanticChecker:
         node.parameters = [param_symbol]
 
     def _handle_Parameters(self, node: ParseNode):
-        """
-        处理函数参数列表节点
-        设置节点属性: 1.参数列表
-        错误检查: 1.参数列表是否有重复
 
-        {'prod_lhs': 'Parameters', 'prod_rhs': ['ParamVar']},
-        {'prod_lhs': 'Parameters', 'prod_rhs': ['ParamVar', ',']},
-        {'prod_lhs': 'Parameters', 'prod_rhs': ['ParamVar', ',', 'Parameters']},
-        """
         # 初始化参数列表
         parameters = []
         position_counter = 0
@@ -333,26 +259,16 @@ class SemanticChecker:
                     param.position = position_counter
                     position_counter += 1
                     parameters.append(param)
-                    param_names.add(param.name)
-                    logger.info(f"添加参数: {param} (位置: {param.position})")                    
+                    param_names.add(param.name)                 
 
         node.parameters = parameters
-        logger.info(f"参数列表处理完成，共 {len(parameters)} 个参数: {[p.name for p in parameters]}")
+
                 
     def _handle_FunctionHeaderDeclaration(self, node: ParseNode):
-        """
-        处理函数头节点
-        设置节点属性: 1.函数名称 2.函数参数 3.函数返回值类型
 
-        {'prod_lhs': 'FunctionHeaderDeclaration', 'prod_rhs': ['fn', 'ID', '(', 'Parameters', ')']},
-        {'prod_lhs': 'FunctionHeaderDeclaration', 'prod_rhs': ['fn', 'ID', '(', ')']},
-        {'prod_lhs': 'FunctionHeaderDeclaration', 'prod_rhs': ['fn', 'ID', '(', 'Parameters', ')', '->', 'Type']},
-        {'prod_lhs': 'FunctionHeaderDeclaration', 'prod_rhs': ['fn', 'ID', '(', ')', '->', 'Type']},
-        """
         # 提取函数名
         func_name_node = node.children[1]  # ID节点
         node.func_name = func_name_node.value
-        logger.info(f"解析到函数名: {node.func_name}")
 
         # Begin:进入该函数的作用域
         self.symbolTable.enter_scope(node.func_name)
@@ -386,16 +302,9 @@ class SemanticChecker:
         # 调试输出完整函数头信息
         param_str = ", ".join([f"{param.name}: {param.type_obj}" for param in node.parameters])
         return_str = f" -> {node.return_type}" if node.return_type is not None else "void"
-        logger.info(f"函数头解析完成: fn {node.func_name}({param_str}) -> {return_str}")
 
     def _handle_FunctionDeclaration(self, node: ParseNode):
-        """
-        处理函数声明节点
-        将函数符号加入到符号表中
 
-        {'prod_lhs': 'FunctionDeclaration', 'prod_rhs': ['FunctionHeaderDeclaration', 'FunctionExpressionBlock']}, # 函数表达式块
-        {'prod_lhs': 'FunctionDeclaration', 'prod_rhs': ['FunctionHeaderDeclaration', 'Block']},                   # 函数体
-        """
         header_node = node.children[0]   # FunctionHeaderDeclaration
         body_node = node.children[-1]    # FunctionExpressionBlock/Block
         declared_return_type = header_node.return_type   # 函数声明返回值类型
@@ -429,16 +338,7 @@ class SemanticChecker:
 # ------------------ 表达式 -------------------------
 
     def _handle_Expression(self, node: ParseNode):
-        """
-        处理表达式节点
-        语义动作: 按照数值表示法的翻译方式
 
-        {'prod_lhs': 'Expression', 'prod_rhs': ['AddExpression']},
-        {'prod_lhs': 'Expression', 'prod_rhs': ['FunctionExpressionBlock']},
-        {'prod_lhs': 'Expression', 'prod_rhs': ['SelectExpression']},
-        {'prod_lhs': 'Expression', 'prod_rhs': ['LoopStatement']},
-        {'prod_lhs': 'Expression', 'prod_rhs': ['Expression', 'Relop', 'AddExpression']},
-        """
         if len(node.children) == 1:
             node.expr_res = node.children[0].expr_res
             node.attributes = node.children[0].attributes
@@ -454,7 +354,6 @@ class SemanticChecker:
                 node.expr_res = ExprResult(type_obj=UnitType(), is_rvalue=True)
                 return
               
-            logger.info(f"关系运算: {left_type} {op.value} {right_type} => bool")
             node.expr_res = ExprResult(type_obj=BaseType('bool'), is_rvalue=True)
 
             # 生成中间代码
@@ -467,33 +366,17 @@ class SemanticChecker:
             node.attributes.place = temp
 
     def _handle_FunctionExpressionBlock(self, node: ParseNode):
-        """
-        处理函数表达式块
-        设置节点属性: 1.表达式结果
 
-        {'prod_lhs': 'FunctionExpressionBlock', 'prod_rhs': ['{', 'FunctionExpressionString', '}']}
-        """
         node.expr_res = node.children[1].expr_res
         node.attributes.place = node.children[1].attributes.place
 
     def _handle_FunctionExpressionString(self, node: ParseNode):
-        """
-        处理表达式序列
-        设置节点属性: 1.表达式结果
 
-        {'prod_lhs': 'FunctionExpressionString', 'prod_rhs': ['Expression']},
-        {'prod_lhs': 'FunctionExpressionString', 'prod_rhs': ['Statement', 'FunctionExpressionString']},
-        """
         node.expr_res = node.children[-1].expr_res
         node.attributes.place = node.children[-1].attributes.place
 
     def _handle_SelectExpression(self, node: ParseNode):
-        """
-        处理条件表达式
-        设置节点属性: 1.表达式结果
-        
-        {'prod_lhs': 'SelectExpression', 'prod_rhs': ['if', 'Expression', 'ControlFLowMarker', 'FunctionExpressionBlock', 'else', 'FunctionExpressionBlock']}
-        """
+
         cond, if_block, else_block = node.children[1], node.children[3], node.children[5]
 
         # 检查条件类型必须是bool
@@ -525,12 +408,7 @@ class SemanticChecker:
         node.attributes.place = temp
 
     def _handle_AddExpression(self, node: ParseNode):
-        """
-        处理加减表达式
 
-        {'prod_lhs': 'AddExpression', 'prod_rhs': ['Item']},
-        {'prod_lhs': 'AddExpression', 'prod_rhs': ['AddExpression', 'AddOp', 'Item']},
-        """
         if len(node.children) == 1: # Itenm
             node.expr_res = node.children[0].expr_res
             node.attributes = node.children[0].attributes
@@ -545,7 +423,6 @@ class SemanticChecker:
                 node.expr_res = ExprResult(type_obj=UnitType(), is_rvalue=True)
                 return
             
-            logger.info(f"加减运算: {left_type} {op.value} {right_type}")
             node.expr_res = ExprResult(type_obj=left_type, is_rvalue=True)
 
             # 生成中间代码
@@ -558,13 +435,7 @@ class SemanticChecker:
             node.attributes.place = temp
 
     def _handle_Item(self, node: ParseNode):
-        """
-        处理乘除表达式
-        设置节点属性: 1.类型对象(type_obj)
 
-        {'prod_lhs': 'Item', 'prod_rhs': ['Factor']},
-        {'prod_lhs': 'Item', 'prod_rhs': ['Item', 'MulOp', 'Factor']},
-        """
         if len(node.children) == 1: # Factor
             node.expr_res = node.children[0].expr_res
             node.attributes = node.children[0].attributes
@@ -579,7 +450,7 @@ class SemanticChecker:
                 node.expr_res = ExprResult(type_obj=UnitType(), is_rvalue=True)
                 return
             
-            logger.info(f"乘除运算: {left_type} {op.value} {right_type}")
+
             node.expr_res = ExprResult(type_obj=left_type, is_rvalue=True)
 
             # Item -> Item MulOp Factor
@@ -593,19 +464,7 @@ class SemanticChecker:
             node.attributes.place = temp
 
     def _handle_Factor(self, node: ParseNode):
-        """
-        处理因子表达式
-        设置节点属性: 1.类型对象(type_obj)
 
-        {'prod_lhs': 'Factor', 'prod_rhs': ['Element']},
-        {'prod_lhs': 'Factor', 'prod_rhs': ['[', 'ArrayElementList', ']']},  # 数组
-        {'prod_lhs': 'Factor', 'prod_rhs': ['[', ']']},                      # 空数组
-        {'prod_lhs': 'Factor', 'prod_rhs': ['(', 'TupleAssignInner', ')']},  # 元组
-        {'prod_lhs': 'Factor', 'prod_rhs': ['(', ')']},                      # 空元组
-        {'prod_lhs': 'Factor', 'prod_rhs': ['*', 'Factor']},                 # 解引用     -- 作为右值
-        {'prod_lhs': 'Factor', 'prod_rhs': ['&', 'mut', 'Factor']},          # 可变引用   -- 作为右值
-        {'prod_lhs': 'Factor', 'prod_rhs': ['&', 'Factor']},                 # 不可变引用 -- 作为右值
-        """
 
         first = node.children[0]
 
@@ -712,14 +571,7 @@ class SemanticChecker:
                 )
 
     def _handle_ArrayElementList(self, node: ParseNode):
-        """
-        处理数组元素列表
-        设置节点属性: 1.表达式列表expressions(表达式节点列表)
 
-        {'prod_lhs': 'ArrayElementList', 'prod_rhs': ['Expression']},
-        {'prod_lhs': 'ArrayElementList', 'prod_rhs': ['Expression', ',']},
-        {'prod_lhs': 'ArrayElementList', 'prod_rhs': ['Expression', ',', 'ArrayElementList']},
-        """
         # 收集所有表达式节点
         expressions = []
         for child in node.children:
@@ -729,16 +581,9 @@ class SemanticChecker:
                 expressions.extend(child.expressions)
 
         node.expressions = expressions
-        logger.info(f"数组元素列表: {len(expressions)} 个元素")
 
     def _handle_TupleAssignInner(self, node: ParseNode):
-        """
-        处理元组赋值内部结构
-        设置节点属性: 1.成员类型列表member_types(类型对象列表)
 
-        {'prod_lhs': 'TupleAssignInner', 'prod_rhs': ['Expression', ',', 'TupleElementList']},
-        {'prod_lhs': 'TupleAssignInner', 'prod_rhs': ['Expression', ',']},
-        """
         expressions = [node.children[0].expr_res]  # 第一个表达式类型
 
         if len(node.children) > 2 and node.children[2].symbol == "TupleElementList":
@@ -747,14 +592,7 @@ class SemanticChecker:
         node.expressions = expressions
 
     def _handle_TupleElementList(self, node: ParseNode):
-        """
-        处理元组元素列表
-        设置节点属性: 1.成员类型列表member_types(类型对象列表)
 
-        {'prod_lhs': 'TupleElementList', 'prod_rhs': ['Expression']},
-        {'prod_lhs': 'TupleElementList', 'prod_rhs': ['Expression', ',']},
-        {'prod_lhs': 'TupleElementList', 'prod_rhs': ['Expression', ',', 'TupleElementList']},
-        """
         expressions = []
         for child in node.children:
             if child.symbol == "Expression":
@@ -765,16 +603,7 @@ class SemanticChecker:
         node.expressions = expressions
 
     def _handle_Element(self, node: ParseNode):
-        """
-        处理基础元素节点
-        设置节点属性: 2.类型对象(type_obj)
 
-        {'prod_lhs': 'Element', 'prod_rhs': ['NUM']},
-        {'prod_lhs': 'Element', 'prod_rhs': ['Assignableidentifier']},      # 左值变为右值
-        {'prod_lhs': 'Element', 'prod_rhs': ['(', 'Expression', ')']},
-        {'prod_lhs': 'Element', 'prod_rhs': ['ID', '(', 'Arguments', ')']},
-        {'prod_lhs': 'Element', 'prod_rhs': ['ID', '(', ')']},
-        """
         first_child = node.children[0]
 
         if first_child.symbol == "NUM": # 数字字面量 (NUM)
@@ -833,13 +662,7 @@ class SemanticChecker:
             node.attributes.place = temp
 
     def _handle_Arguments(self, node: ParseNode):
-        """
-        处理函数调用参数
 
-        {'prod_lhs': 'Arguments', 'prod_rhs': ['Expression']},
-        {'prod_lhs': 'Arguments', 'prod_rhs': ['Expression', ',']},
-        {'prod_lhs': 'Arguments', 'prod_rhs': ['Expression', ',', 'Arguments']},
-        """
         # 初始化参数列表
         arguments = []
 
@@ -855,13 +678,7 @@ class SemanticChecker:
         node.arguments = arguments
 
     def _handle_Assignableidentifier(self, node: ParseNode):
-        """
-        处理可赋值标识符(左值)
-        设置节点属性: 1.表达式结果
-        
-        {'prod_lhs': 'Assignableidentifier', 'prod_rhs': ['*', 'Assignableidentifier']},  # 指针解引用
-        {'prod_lhs': 'Assignableidentifier', 'prod_rhs': ['AssignableidentifierInner']},  # 基础左值
-        """
+
         if node.children[0].value == '*':  # 指针解引用
             target = node.children[1]
 
@@ -878,14 +695,7 @@ class SemanticChecker:
             node.attributes = node.children[0].attributes
     
     def _handle_AssignableidentifierInner(self, node: ParseNode):
-        """
-        处理基础可赋值标识符
-        设置节点属性: 1.变量是否可变(is_mutable) 2.类型对象(type_obj)
 
-        {'prod_lhs': 'AssignableidentifierInner', 'prod_rhs': ['Element', '[', 'Expression', ']']},  # 数组索引
-        {'prod_lhs': 'AssignableidentifierInner', 'prod_rhs': ['Element', '.', 'NUM']},              # 元组成员
-        {'prod_lhs': 'AssignableidentifierInner', 'prod_rhs': ['ID']},                               # 普通变量
-        """
         if len(node.children) == 4:  # 数组索引
             array = node.children[0]
             index = node.children[2]
@@ -927,7 +737,6 @@ class SemanticChecker:
                 is_lvalue=True,
                 index_expr=index.expr_res
             )
-            logger.info(f"数组索引: {array.value}[{index.value}] -> {node.type_obj}")
 
         elif len(node.children) == 3:  # 元组成员
             struct = node.children[0]                   # 
@@ -971,59 +780,27 @@ class SemanticChecker:
             node.attributes.place = node.children[0].value # 标识符名称
                 
     def _handle_Relop(self, node: ParseNode):
-        """
-        处理关系运算符
-        设置节点属性: 1.终结符原值
 
-        {'prod_lhs': 'Relop', 'prod_rhs': ['<']},
-        {'prod_lhs': 'Relop', 'prod_rhs': ['<=']},
-        {'prod_lhs': 'Relop', 'prod_rhs': ['>']},
-        {'prod_lhs': 'Relop', 'prod_rhs': ['>=']},
-        {'prod_lhs': 'Relop', 'prod_rhs': ['==']},
-        {'prod_lhs': 'Relop', 'prod_rhs': ['!=']},
-        """
         node.value = node.children[0].value
 
     def _handle_AddOp(self, node: ParseNode):
-        """
-        处理加减运算符
-        设置节点属性: 1.终结符原值
 
-        {'prod_lhs': 'AddOp', 'prod_rhs': ['+']},
-        {'prod_lhs': 'AddOp', 'prod_rhs': ['-']},
-        """
         node.value = node.children[0].value
         
     def _handle_MulOp(self, node: ParseNode):
-        """
-        处理乘除运算符
-        设置节点属性: 1.终结符原值
-        
-        {'prod_lhs': 'MulOp', 'prod_rhs': ['*']},
-        {'prod_lhs': 'MulOp', 'prod_rhs': ['/']},
-        """
+    
         node.value = node.children[0].value
 
 # -------------------- 语句块 -------------------------
 
     def _handle_Block(self, node: ParseNode):
-        """
-        处理代码块
-
-        {'prod_lhs': 'Block', 'prod_rhs': ['{', 'StatementString', '}']},
-        {'prod_lhs': 'Block', 'prod_rhs': ['{', '}']},
-        """
+ 
         if len(node.children) == 3:
             node.attributes.next_list = node.children[1].attributes.next_list
             node.last_return = node.children[1].last_return
 
     def _handle_StatementString(self, node: ParseNode):
-        """
-        处理语句序列
-
-        {'prod_lhs': 'StatementString', 'prod_rhs': ['Statement']},
-        {'prod_lhs': 'StatementString', 'prod_rhs': ['StatementString', 'BeginMarker', 'Statement']},
-        """
+ 
         if len(node.children) == 3:
             L1 = node.children[0].attributes
             M = node.children[1].attributes
@@ -1037,32 +814,13 @@ class SemanticChecker:
             node.last_return = node.children[-1]
 
     def _handle_Statement(self, node: ParseNode):
-        """
-        处理语句
-
-        {'prod_lhs': 'Statement', 'prod_rhs': [';']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['ReturnStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['VarDeclarationStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['AssignStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['Expression', ';']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['IfStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['CirculateStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['VarDeclarationAssignStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['BreakStatement']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['ContinueStatement']},
-        """
+       
         node.attributes = node.children[0].attributes
         if node.children[0].symbol == 'ReturnStatement':
             node.last_return = True
 
     def _handle_ReturnStatement(self, node: ParseNode):
-        """
-        处理返回语句
-        检查: 1.判断当前返回语句的返回类型与声明的返回类型是否一致
-
-        {'prod_lhs': 'ReturnStatement', 'prod_rhs': ['return', 'Expression', ';']},
-        {'prod_lhs': 'ReturnStatement', 'prod_rhs': ['return', ';']},
-        """
+   
         declared_return_type = self.current_function.return_type_obj
         actual_return_type = node.children[1].expr_res.type_obj if len(node.children) == 3 else UnitType()
 
@@ -1076,12 +834,7 @@ class SemanticChecker:
             self.code_generator.emit('RETURN', None, None, "$ret_reg")
 
     def _handle_AssignStatement(self, node: ParseNode):
-        """
-        处理赋值语句
-        检查: 1.是否给不可变量赋值 2.类型是否匹配
         
-        {'prod_lhs': 'AssignStatement', 'prod_rhs': ['Assignableidentifier', '=', 'Expression', ';']},
-        """
         lvalue_node, rvalue_node = node.children[0], node.children[2]
 
         lvalue_type = lvalue_node.expr_res.type_obj
@@ -1123,13 +876,6 @@ class SemanticChecker:
 # ------------------- 控制流 ----------------------
 
     def _handle_ControlFLowMarker(self, node: ParseNode):
-        """
-        语义动作: 利用前面的布尔表达式计算的值跳转
-        [next_quad + 0] - jnz tmp None None(待回填)
-        [next_quad + 1] - j None None None(待回填)
-
-        {'prod_lhs': 'ControlFLowMarker', 'prod_rhs': []},
-        """
         expr_res_place = f"t{self.code_generator.temp_counter - 1}"
         node.attributes.true_list = [self.code_generator.next_quad]
         node.attributes.false_list = [self.code_generator.next_quad + 1]
@@ -1147,39 +893,16 @@ class SemanticChecker:
         self.symbolTable.enter_scope(f"Loop_{len(self.loop_stack)}")
 
     def _handle_ReDoMarker(self, node: ParseNode):
-        """
-        语义动作: 记录循环开始的位置
-
-        {'prod_lhs': 'ReDoMarker', 'prod_rhs': []},
-        """
         node.attributes.quad_index = self.code_generator.next_quad
 
     def _handle_BeginMarker(self, node: ParseNode):
-        """
-        语义动作: 记录语句块的开始位置(用于回填)
-
-        {'prod_lhs': 'BeginMarker', 'prod_rhs': []},
-        """
         node.attributes.quad_index = self.code_generator.next_quad
 
     def _handle_EndMarker(self, node: ParseNode):
-        """
-        语义动作: 
-
-        {'prod_lhs': 'EndMarker', 'prod_rhs': []},
-        """
         node.attributes.next_list = [self.code_generator.next_quad]
         self.code_generator.emit('j', None, None, None)
     
     def _handle_IfStatement(self, node: ParseNode):
-        """
-        处理if语句
-        语义动作: 
-        
-        {'prod_lhs': 'IfStatement', 'prod_rhs': ['if', 'Expression', 'ControlFLowMarker', 'BeginMarker', 'Block']},
-        {'prod_lhs': 'IfStatement', 'prod_rhs': ['if', 'Expression', 'ControlFLowMarker', 'BeginMarker', 'Block', 'EndMarker', 'else', 'BeginMarker', 'Block']},
-        {'prod_lhs': 'IfStatement', 'prod_rhs': ['if', 'Expression', 'ControlFLowMarker', 'BeginMarker', 'Block', 'EndMarker', 'else', 'BeginMarker', 'IfStatement']},
-        """
         cond_expr = node.children[1].expr_res   # 条件表达式
         has_else = len(node.children) > 5       # 是否有else分支
 
@@ -1206,22 +929,10 @@ class SemanticChecker:
             node.attributes.next_list = self.code_generator.merge_lists(C.false_list, block1_attrs.next_list)
 
     def _handle_CirculateStatement(self, node: ParseNode):
-        """
-        处理循环语句
-
-        {'prod_lhs': 'CirculateStatement', 'prod_rhs': ['LoopMarker', 'WhileStatement']},
-        {'prod_lhs': 'CirculateStatement', 'prod_rhs': ['LoopMarker', 'ForStatement']},
-        {'prod_lhs': 'CirculateStatement', 'prod_rhs': ['LoopMarker', 'LoopStatement']},
-        """
         node.attributes = node.children[1].attributes
         self.symbolTable.exit_scope()
 
     def _handle_WhileStatement(self, node: ParseNode):
-        """
-        处理while循环
-
-        {'prod_lhs': 'WhileStatement', 'prod_rhs': ['while', 'ReDoMarker', 'Expression', 'ControlFLowMarker', 'BeginMarker', 'Block']},
-        """
         cond_expr_res = node.children[2].expr_res
     
         # 检查条件表达式
@@ -1242,12 +953,6 @@ class SemanticChecker:
         self.code_generator.emit('j', None, None, M1.quad_index)
 
     def _handle_IterableStructure(self, node: ParseNode):
-        """
-        处理可迭代结构
-
-        {'prod_lhs': 'IterableStructure', 'prod_rhs': ['Expression', '..', 'Expression']},
-        {'prod_lhs': 'IterableStructure', 'prod_rhs': ['Element']},
-        """
         if len(node.children) == 3: # 范围表达式 `a..b`
             start_expr = node.children[0].expr_res
             end_expr = node.children[2].expr_res
@@ -1270,11 +975,6 @@ class SemanticChecker:
             node.expr_res = ExprResult(type_obj=element.type_obj)
 
     def _handle_ForExpression(self, node: ParseNode):
-        """
-        处理for循环判断表达式
-
-        {'prod_lhs': 'ForExpression', 'prod_rhs': ['VarDeclaration', 'in', 'IterableStructure']},
-        """
         # 确保可迭代结构已被正确处理
         iterable = node.children[2].expr_res
         if not hasattr(iterable, 'type_obj'):
@@ -1319,11 +1019,6 @@ class SemanticChecker:
         self.code_generator.emit('+', temp_iterator, step, temp_iterator)
 
     def _handle_ForStatement(self, node: ParseNode):
-        """
-        处理for循环
-
-        {'prod_lhs': 'ForStatement', 'prod_rhs': ['for', 'ForExpression', 'BeginMarker', 'Block']},
-        """
         C = node.children[1].attributes
         M1 = node.children[2].attributes
         S1 = node.children[3].attributes
@@ -1334,11 +1029,6 @@ class SemanticChecker:
         self.code_generator.emit('j', None, None, C.quad_index) # 跳转到开始
 
     def _handle_LoopStatement(self, node: ParseNode):
-        """
-        处理Loop循环
-
-        {'prod_lhs': 'LoopStatement', 'prod_rhs': ['loop', 'Block']},
-        """
         S = node.children[1].attributes
         loop_info = self.loop_stack.pop()
         self.code_generator.backpatch(S.next_list, loop_info['begin_quad'])
@@ -1347,12 +1037,6 @@ class SemanticChecker:
         node.attributes.next_list = loop_info['break_list']                # 记录待回填四元式
 
     def _handle_BreakStatement(self, node: ParseNode):
-        """
-        处理break语句
-
-        {'prod_lhs': 'Statement', 'prod_rhs': ['break', ';']},
-        {'prod_lhs': 'Statement', 'prod_rhs': ['break', 'Expression', ';']},
-        """
         if not self.loop_stack:
             self._report_error("break语句必须在循环内使用", node)
             return
@@ -1369,11 +1053,6 @@ class SemanticChecker:
         current_loop["break_list"].append(quad_index)
 
     def _handle_ContinueStatement(self, node: ParseNode):
-        """
-        处理continue语句
-
-        {'prod_lhs': 'Statement', 'prod_rhs': ['continue', ';']},
-        """
         if not hasattr(self, 'loop_stack') or not self.loop_stack:
             self._report_error("continue语句必须在循环内使用", node)
             return
@@ -1411,13 +1090,9 @@ class SemanticChecker:
         return first_type
 
     def _is_type_compatible(self, actual: Type, expected: Type) -> bool:
-        """类型兼容性检查"""
-        logger.info(f"类型兼容性检查 Type1: {type_to_string(actual)} Type2: {type_to_string(expected)}")
-        logger.info(f"类型兼容性检查 Type1: {type(actual)} Type2: {type(expected)}")
-
         # 1. 未初始化类型
         if isinstance(actual, UninitializedType):
-            logger.info(f"未初始化类型 {actual.inner_type} {expected}")
+            logger.info(f"❌  未初始化类型 {actual.inner_type} {expected}")
             return self._is_type_compatible(actual.inner_type, expected)
         
         if isinstance(expected, UninitializedType):
@@ -1437,7 +1112,6 @@ class SemanticChecker:
         
         # 5. 数组类型：元素类型兼容且长度相同
         if isinstance(actual, ArrayType) and isinstance(expected, ArrayType):
-            logger.info(f"{actual} {expected}")
             return (actual.size == expected.size and
                     self._is_type_compatible(actual.element_type, expected.element_type))
         
