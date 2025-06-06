@@ -1,7 +1,7 @@
 """语法分析树节点"""
 from dataclasses import dataclass, field
 from typing import Optional, List, Any
-from compiler_lexer import Token
+from compiler_lexer import Tokenize,LexicalElement
 
 @dataclass
 class ExprResult:
@@ -14,6 +14,7 @@ class ExprResult:
     is_rvalue: bool = False              # 是否可以作为右值
     index_expr: Optional[Any] = None     # 用于数组索引
     member_index: Optional[Any] = None   # 用于元组成员访问
+    
 
 @dataclass
 class SynthesizedAttributes:
@@ -31,7 +32,7 @@ class ParseNode:
             self, 
             symbol: str, 
             children: Optional[List["ParseNode"]] = None, 
-            token: Optional[Token] = None
+            token: Optional[LexicalElement] = None
             ):
         """
         语法分析树节点
@@ -40,13 +41,14 @@ class ParseNode:
         :param children: 子节点列表
         :param token: 关联的词法单元(对终结符节点)
         """
-        self.symbol = symbol                              # 该节点的名称
-        self.children: List[ParseNode] = children or []   # 该节点的孩子
-        self.token = token                                # 该节点对应的Token(终结符节点)
+        self.symbol = symbol
+        self.children = children if children is not None else []
+        self.token = token
 
-        self.value = token.value if token else None  # 该节点对应的值(初始化为终结符节点) # !!NodeValue
-        self.line = token.line if token else -1      # 该节点位于的行(终结符节点)
-        self.column = token.column if token else -1  # 该节点位于的列(终结符节点)
+        # 终结符相关属性
+        self.value = getattr(token, "value", None)
+        self.line = getattr(token, "line", -1)
+        self.column = getattr(token, "column", -1)
 
         # 语义分析属性
         self.expr_res: Optional[ExprResult] = None # 表达式结果信息

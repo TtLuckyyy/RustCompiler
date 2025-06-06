@@ -94,10 +94,10 @@ class SemanticChecker:
         first_child = node.children[0]
 
         
-        if first_child.value == 'i32': # 基础类型 (i32)
+        if first_child.value == 'i32' or first_child.symbol == 'i32': # 基础类型 (i32)
             node.type_obj = BaseType("i32")
 
-        elif first_child.value == '[':  # 数组类型 [Type; NUM]
+        elif first_child.value == '[' or first_child.symbol == '[':  # 数组类型 [Type; NUM]
             element_type_node = node.children[1]  # 数组元素类型节点
             size_node = node.children[3]          # 数组大小节点
 
@@ -116,13 +116,13 @@ class SemanticChecker:
                 size=size
             )
 
-        elif first_child.value == '(':
+        elif first_child.value == '(' or first_child.symbol == '(':  # 元组类型 (TypeList)
             if len(node.children) == 2:  # 空元组
                 node.type_obj = TupleType([])
             else:
                 node.type_obj = TupleType(node.children[1].member_types)
 
-        elif first_child.value == '&':  # 引用类型 &mut T 或 &T
+        elif first_child.value == '&' or first_child.symbol == '&':  # 引用类型 &mut T 或 &T
             is_mut = len(node.children) > 2 and node.children[1].value == 'mut' # 是否为可变引用
             target_type_node = node.children[-1]                                # 目标类型对象
             

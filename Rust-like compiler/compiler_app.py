@@ -4,8 +4,8 @@ from PIL import Image, ImageTk, ImageSequence
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 from graphviz import Digraph
-from compiler_lexer import Token, TokenType, Lexer
-from compiler_parser import ParseNode, Parser
+from compiler_lexer import Tokenize
+from compiler_parser import ParseNode, SyntaxParser
 from compiler_semantic_checker import SemanticChecker
 from compiler_codegenerator import Quadruple
 from compiler_rust_grammar import RUST_GRAMMAR, RUST_GRAMMAR_PPT
@@ -33,8 +33,8 @@ class GrammarVisualizerApp:
         self.tree_offset_y = 0
         self.drag_data = {"x": 0, "y": 0, "item": None} 
 
-        self.lexer = Lexer()              # 词法分析器
-        self.parser = Parser()            # 语法分析器
+        self.lexer = Tokenize()           # 词法分析器
+        self.parser = SyntaxParser()      # 语法分析器
         self.checker = SemanticChecker()  # 语义检查器(内置中间代码生成器)
 
         self.create_loading_screen()
@@ -102,8 +102,8 @@ class GrammarVisualizerApp:
 
         # 插入语法产生式
         idx = 0
-        for lhs in self.parser.productions.keys():
-            for prod in self.parser.productions[lhs]:
+        for lhs in self.parser.rules.keys():  # productions -> rules
+            for prod in self.parser.rules[lhs]:
                 rhs = prod['rhs']
                 rhs_str = ' '.join(rhs) if rhs else 'ε'
                 tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
@@ -227,8 +227,8 @@ class GrammarVisualizerApp:
                 messagebox.showwarning("警告", "请输入要分析的代码")
                 return
             
-            tokens = self.lexer.tokenize(code)
-            ast_root, self.analysis_details = self.parser.analyse(tokens=tokens, checker=self.checker)
+            tokens = self.lexer.analyse(code)
+            ast_root, self.analysis_details = self.parser.parse(tokens=tokens, checker=self.checker)
             self.show_ast(ast_root)
             self.show_step(0)
             errors = self.checker.get_errors()
@@ -244,14 +244,14 @@ class GrammarVisualizerApp:
         """记录语法分析的每一步过程"""
         self.analysis_details = []
         state_stack = [0]  # 状态栈
-        node_stack =  []   # 节点栈
+        node_stack = []    # 节点栈
         idx = 0            # 当前token指针
         token_stream = list(tokens)
 
         while True:
             state = state_stack[-1]
             current_token = token_stream[idx]
-            
+
             # 记录当前状态
             step_info = {
                 "stack": list(state_stack),
@@ -260,11 +260,11 @@ class GrammarVisualizerApp:
                 "action": "",
                 "production": ""
             }
-            
+
             # 查ACTION表
-            action = self.parser.action_table[state].get(current_token.type.value)
+            action = self.parser.action[state].get(current_token.type.value)
             if not action:
-                expected = sorted(self.parser.action_table[state].keys())
+                expected = sorted(self.parser.action[state].keys())
                 context = token_stream[max(0, idx-2):idx+1]
                 raise SyntaxError(
                     f"语法错误（第{current_token.line}行, 第{current_token.column}列）\n"
@@ -276,54 +276,50 @@ class GrammarVisualizerApp:
             # 执行动作
             if action[0] == 'shift':
                 step_info["action"] = f"移入: {current_token} -> 状态{action[1]}"
-                
                 # 创建终结符节点
                 new_node = ParseNode(symbol=current_token.type.value, children=None, token=current_token)
                 node_stack.append(new_node)
                 idx += 1
-                
                 # ACTION转移
                 action_state = action[1]
                 state_stack.append(action_state)
-                
+
             elif action[0] == 'reduce':
                 prod_index = action[1]
-                prod = self.parser.prod_by_index[prod_index]
+                prod = self.parser.rule_index_map[prod_index]  # 修正此处
                 lhs = prod['lhs']
                 rhs_len = len(prod['rhs'])
-                
-                step_info["production"] = f"{lhs} → {' '.join(prod['rhs']) if prod['rhs'] else 'ε' }" 
+
+                step_info["production"] = f"{lhs} → {' '.join(prod['rhs']) if prod['rhs'] else 'ε'}"
                 step_info["action"] = f"规约: 应用产生式 {prod_index}"
-                
+
                 children = []
                 if rhs_len > 0:
                     state_stack = state_stack[:-rhs_len]
                     children = node_stack[-rhs_len:]
                     node_stack = node_stack[:-rhs_len]
-                
+
                 # 创建非终结符节点
                 new_node = ParseNode(symbol=lhs, children=children)
                 self.checker.on_reduce(node=new_node)
                 node_stack.append(new_node)
 
                 # GOTO转移
-                goto_state = self.parser.goto_table[state_stack[-1]].get(lhs)
+                goto_state = self.parser.goto_tbl[state_stack[-1]].get(lhs)
                 state_stack.append(goto_state)
-                
+
             elif action[0] == 'accept':
                 step_info["action"] = "接受: 分析完成"
                 self.analysis_details.append(step_info)
                 self.visualize_ast(node_stack[0])
                 self.show_step(0)
                 break
-            
+
             self.analysis_details.append(step_info)
 
         errors = self.checker.get_errors()
-        if errors:
-            self.show_semantic_errors(errors=errors)
-        else:
-            self.show_quadruples(self.checker.get_quads())
+        self.show_semantic_errors(errors=errors)
+        self.show_quadruples(self.checker.get_quads())
 
     def show_quadruples(self, quadruples: List[Quadruple]):
         """更新中间代码显示"""
@@ -536,7 +532,7 @@ class GrammarVisualizerApp:
             action_tree.pack(fill=tk.BOTH, expand=True)
         
             # 设置列
-            terminals = sorted({k for state in self.parser.action_table.values() for k in state.keys()})
+            terminals = sorted({k for state in self.parser.action.values() for k in state.keys()})
             action_tree["columns"] = terminals
             action_tree.column("#0", width=80, anchor="center")  # 状态列
             action_tree.heading("#0", text="状态")
@@ -547,8 +543,8 @@ class GrammarVisualizerApp:
                 action_tree.heading(term, text=term)
 
             # 填充数据
-            for state in sorted(self.parser.action_table.keys()):
-                values = [self.parser.action_table[state].get(term, "") for term in terminals]
+            for state in sorted(self.parser.action.keys()):
+                values = [self.parser.action[state].get(term, "") for term in terminals]
                 action_tree.insert("", "end", text=str(state), values=values)
 
             # ----------------- GOTO表 -----------------
@@ -559,7 +555,7 @@ class GrammarVisualizerApp:
             goto_tree.pack(fill=tk.BOTH, expand=True)
         
             # 设置列
-            non_terminals = sorted({k for state in self.parser.goto_table.values() for k in state.keys()})
+            non_terminals = sorted({k for state in self.parser.goto_tbl.values() for k in state.keys()})
             goto_tree["columns"] = non_terminals
             goto_tree.column("#0", width=80, anchor="center")
             goto_tree.heading("#0", text="状态")
@@ -570,8 +566,8 @@ class GrammarVisualizerApp:
                 goto_tree.heading(nt, text=nt)
 
             # 填充数据
-            for state in sorted(self.parser.goto_table.keys()):
-                values = [self.parser.goto_table[state].get(nt, "") for nt in non_terminals]
+            for state in sorted(self.parser.goto_tbl.keys()):
+                values = [self.parser.goto_tbl[state].get(nt, "") for nt in non_terminals]
                 goto_tree.insert("", "end", text=str(state), values=values)
 
             # 添加滚动条
@@ -617,7 +613,7 @@ class GrammarVisualizerApp:
         """在单独的线程中启动解析器初始化"""
         def parsing_thread():
             # 执行耗时操作 -- 构建分析表
-            self.parser.build_parse_table(RUST_GRAMMAR_PPT)
+            self.parser.build_table(RUST_GRAMMAR_PPT)
 
             # 完成后，在主线程中销毁加载界面并创建主界面
             self.root.after(0, self.finish_loading)
